@@ -50,15 +50,19 @@ optional arguments:
 
 ## Demo
 
-Acquire artifacts on macOS 10.14, then analyze them on macOS 10.15 with AutoMacTC.
+Acquire artifacts on macOS 10.14, then analyze them on macOS 10.15 with AutoMacTC. This demo movie was made for Japan Security Analyst Conference 2020 (JSAC2020)
+
 ![macosac demo](images/JSAC2020_demo1.gif)
-Demo movie for Japan Security Analyst Conference 2020 (JSAC2020)
 
 ## Installation
 
 ```bash
 git clone https://github.com/mnrkbys/macosac.git
 ```
+
+Besides, Terminal.app have to be allowed "Full Disk Access".
+
+![full disk access](images/permit_full_disk_access.png)
 
 ## Analyze collected artifacts
 
@@ -72,7 +76,7 @@ macOS Artifact Collector can only collect artifacts. Therefore, you need to use 
 
 ## Convert DMG to E01
 
-If you collected artifacts into DMG file (use option "dmg" or "ro-dmg"), you can convert the DMG file into E01.
+If you collect artifacts into a DMG file (using option "dmg" or "ro-dmg"), you can convert it into E01.
 
 ```bash
 $ brew install libewf
