@@ -2,3 +2,4 @@
 * text=auto
 *.md    text eol=lf
 .git*   text eol=lf
+*.ini    text eol=lf
