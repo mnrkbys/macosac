@@ -86,6 +86,11 @@ $ ewfacquire -t evidence -v /dev/disk4s1    -> create evidence.E01 from /dev/dis
 $ hdiutil detach /dev/disk4
 ```
 
+## TODO
+
+- [ ] Acquire live information (e.g. last, netstat, ps, lsof, and so on)
+- [ ] Cooperate with [TrueTree](https://github.com/themittenmac/TrueTree)
+
 ## Author
 
 [Minoru Kobayashi](https://twitter.com/unkn0wnbit)
