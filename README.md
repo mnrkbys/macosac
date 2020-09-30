@@ -90,6 +90,7 @@ $ hdiutil detach /dev/disk4
 
 - [ ] Acquire live information (e.g. last, netstat, ps, lsof, and so on)
 - [ ] Cooperate with [TrueTree](https://github.com/themittenmac/TrueTree)
+- [ ] Acquire binary files which are specified in Launch Daemons/Agents plist files.
 
 ## Author
 
