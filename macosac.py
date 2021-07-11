@@ -477,9 +477,8 @@ def main():
     if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
         print('Creating and mounting DMG file...')
         create_and_mount_dmg(outputdmg, hostname + '_' + session_id, total_size)
-
-    print('Writing .fseventsd/no_log empty file...')
-    write_no_log_fseventsd_file(outputdir)
+        print('Writing .fseventsd/no_log empty file...')
+        write_no_log_fseventsd_file(outputdir)
 
     print('Saving file stat...')
     save_file_stat(outputdir, file_stat_list)
