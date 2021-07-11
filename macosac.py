@@ -187,7 +187,7 @@ def write_no_log_fseventsd_file(outputdir):
             fp.close()
     except OSError as err:
         pass
-        #sys.exit('Cannot write artifact_file_stat.csv: {}'.format(err))
+        #sys.exit('Cannot create .fseventsd/no_log file : {}'.format(err))
 
 
 # get timestamp list that consist of local snapshots and Time Machine backups
