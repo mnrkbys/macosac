@@ -180,6 +180,16 @@ def save_file_stat(outputdir, file_stat_list):
         sys.exit('Cannot write artifact_file_stat.csv: {}'.format(err))
 
 
+def write_no_log_fseventsd_file(outputdir):
+    try:
+        os.makedirs(os.path.join(outputdir, '.fseventsd'))
+        with open(os.path.join(outputdir, '.fseventsd', 'no_log'), 'w') as fp:
+            fp.close()
+    except OSError as err:
+        pass
+        #sys.exit('Cannot create .fseventsd/no_log file : {}'.format(err))
+
+
 # get timestamp list that consist of local snapshots and Time Machine backups
 def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
     backup_list = list()
@@ -467,6 +477,8 @@ def main():
     if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
         print('Creating and mounting DMG file...')
         create_and_mount_dmg(outputdmg, hostname + '_' + session_id, total_size)
+        print('Writing .fseventsd/no_log empty file...')
+        write_no_log_fseventsd_file(outputdir)
 
     print('Saving file stat...')
     save_file_stat(outputdir, file_stat_list)
