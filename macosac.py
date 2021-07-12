@@ -40,6 +40,7 @@ cmd_rsync = '/usr/bin/rsync'
 cmd_tmutil = '/usr/bin/tmutil'
 cmd_hdiutil = '/usr/bin/hdiutil'
 debug_mode = False
+dryrun_mode = False
 file_debug = None
 
 
@@ -69,6 +70,7 @@ def parse_arguments():
     # parser.add_argument('--force', action='store_true', default=False,
     #                     help='Enable to overwrite existing data.')
     parser.add_argument('--debug', action='store_true', default=False, help='Enable debug mode.')
+    parser.add_argument('--dry-run', action='store_true', default=False, help='Enable dry-run mode. Artifact files are NOT copied.')
     args = parser.parse_args()
 
     return args
@@ -90,6 +92,8 @@ def create_and_mount_dmg(dmg_path, volname, data_size):
     # create dmg file
     # dmg_size = data_size + (100 * 1024 * 1024)  # increase 100MB for metadata attributes
     dmg_size = data_size * 1.1  # increase 10% of size for metadata attributes
+    if dmg_size < 1 * 1024 * 1024:  # 1MB
+        dmg_size = 1 * 1024 * 1024
     dbg_print('dmg_path: {}\nvolname: {}\ndata_size: {}\ndmg_size: {}'.format(dmg_path, volname, data_size, dmg_size))
     return_code = subprocess.call([cmd_hdiutil, 'create', '-size', str(dmg_size), '-fs', 'HFS+', '-volname', volname, dmg_path])
     if return_code:
@@ -382,10 +386,14 @@ def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False):
     else:
         verify_codesign(cmd_rsync)
         temp_dir = tempfile.mkdtemp(dir=outputdir)
+        rsync_opts = '-aREL'
+        if dryrun_mode:
+            rsync_opts = rsync_opts + 'n'
         if debug_mode:
-            ps_rsync = subprocess.Popen([cmd_rsync, '-naREL', '--progress', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE)
+            # ps_rsync = subprocess.Popen([cmd_rsync, '-naREL', '--progress', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE)
+            ps_rsync = subprocess.Popen([cmd_rsync, rsync_opts, '--progress', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE)
         else:
-            ps_rsync = subprocess.Popen([cmd_rsync, '-aREL', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            ps_rsync = subprocess.Popen([cmd_rsync, rsync_opts, '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         ps_rsync.communicate(input='\n'.join(artifact_list))
         shutil.rmtree(temp_dir)
         returncode = ps_rsync.returncode
@@ -399,6 +407,7 @@ def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False):
 # main
 def main():
     global debug_mode
+    global dryrun_mode
     global file_debug
 
     session_id = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -406,6 +415,7 @@ def main():
     args = parse_arguments()
 
     debug_mode = args.debug
+    dryrun_mode = args.dry_run
 
     if args.list:
         list_config_categories()
@@ -495,7 +505,7 @@ def main():
             convert_dmg(outputdmg)
 
     if args.localsnapshots:
-        print('Mounting all local snapshots...')
+        print('Unmounting all local snapshots...')
         unmount_all_localsnapshots()
 
     print('Fnished.')
