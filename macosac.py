@@ -150,20 +150,23 @@ def retrieve_file_stat(outputdir, artifact_list, timezone):
         file_stat_list.append(','.join(record_fields))
 
         for file in artifact_list:
-            file_stat = os.lstat(file)
-            record = collections.OrderedDict((field, '') for field in record_fields)
+            try:
+                file_stat = os.lstat(file)
+                record = collections.OrderedDict((field, '') for field in record_fields)
 
-            record['file_path'] = file
-            record['m_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_mtime)) + '.' + "{0:.6f}".format(file_stat.st_mtime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['a_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_atime)) + '.' + "{0:.6f}".format(file_stat.st_atime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['c_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_ctime)) + '.' + "{0:.6f}".format(file_stat.st_ctime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['b_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_birthtime)) + '.' + "{0:.6f}".format(file_stat.st_birthtime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['size'] = file_stat.st_size
-            record['uid'] = file_stat.st_uid
-            record['gid'] = file_stat.st_gid
-            total_size = total_size + (-(-file_stat.st_size // os.statvfs(outputdir).f_frsize) * os.statvfs(outputdir).f_frsize)
+                record['file_path'] = file
+                record['m_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_mtime)) + '.' + "{0:.6f}".format(file_stat.st_mtime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['a_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_atime)) + '.' + "{0:.6f}".format(file_stat.st_atime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['c_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_ctime)) + '.' + "{0:.6f}".format(file_stat.st_ctime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['b_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_birthtime)) + '.' + "{0:.6f}".format(file_stat.st_birthtime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['size'] = file_stat.st_size
+                record['uid'] = file_stat.st_uid
+                record['gid'] = file_stat.st_gid
+                total_size = total_size + (-(-file_stat.st_size // os.statvfs(outputdir).f_frsize) * os.statvfs(outputdir).f_frsize)
 
-            file_stat_list.append(','.join(map(lambda x: str(x), record.values())))
+                file_stat_list.append(','.join(map(lambda x: str(x), record.values())))
+            except Exception as e:
+                print('{}'.format(e))
 
         print("total_size:  {}".format(total_size))
         return file_stat_list, total_size
@@ -222,7 +225,14 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
                     ps_tmutil = subprocess.Popen([cmd_tmutil, 'mountlocalsnapshots', '/', snapshot_timestamp.group(1)], stdout=subprocess.PIPE)
                     mount_result, e = ps_tmutil.communicate()
                     if not ps_tmutil.returncode:
-                        backup_list.append(mount_result.split('\n')[1].split('"')[1])
+                        if mount_result.endswith("(\n)"): # Failed without error, this happens on some systems, reason unknown!
+                            print('Failed to mount snapshot ' + snapshot_timestamp.group(1))
+                            continue
+                        try:
+                            backup_list.append(mount_result.split('\n')[1].split('"')[1])
+                        except Exception as ex:
+                            print('Error trying to mount snapshot - ' + str(ex))
+                            print('mount_result was : ' + str(mount_result))
 
     return backup_list
 
