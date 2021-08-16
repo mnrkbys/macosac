@@ -43,6 +43,7 @@ debug_mode = False
 dryrun_mode = False
 file_debug = None
 
+target_volume = collections.namedtuple("target_volume", "name root_path")
 
 # setup arguments
 def parse_arguments():
@@ -150,20 +151,23 @@ def retrieve_file_stat(outputdir, artifact_list, timezone):
         file_stat_list.append(','.join(record_fields))
 
         for file in artifact_list:
-            file_stat = os.lstat(file)
-            record = collections.OrderedDict((field, '') for field in record_fields)
+            try:
+                file_stat = os.lstat(file)
+                record = collections.OrderedDict((field, '') for field in record_fields)
 
-            record['file_path'] = file
-            record['m_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_mtime)) + '.' + "{0:.6f}".format(file_stat.st_mtime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['a_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_atime)) + '.' + "{0:.6f}".format(file_stat.st_atime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['c_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_ctime)) + '.' + "{0:.6f}".format(file_stat.st_ctime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['b_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_birthtime)) + '.' + "{0:.6f}".format(file_stat.st_birthtime).split('.')[1] + ' ' + time.strftime('%Z%z')
-            record['size'] = file_stat.st_size
-            record['uid'] = file_stat.st_uid
-            record['gid'] = file_stat.st_gid
-            total_size = total_size + (-(-file_stat.st_size // os.statvfs(outputdir).f_frsize) * os.statvfs(outputdir).f_frsize)
+                record['file_path'] = file
+                record['m_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_mtime)) + '.' + "{0:.6f}".format(file_stat.st_mtime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['a_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_atime)) + '.' + "{0:.6f}".format(file_stat.st_atime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['c_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_ctime)) + '.' + "{0:.6f}".format(file_stat.st_ctime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['b_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_birthtime)) + '.' + "{0:.6f}".format(file_stat.st_birthtime).split('.')[1] + ' ' + time.strftime('%Z%z')
+                record['size'] = file_stat.st_size
+                record['uid'] = file_stat.st_uid
+                record['gid'] = file_stat.st_gid
+                total_size = total_size + (-(-file_stat.st_size // os.statvfs(outputdir).f_frsize) * os.statvfs(outputdir).f_frsize)
 
-            file_stat_list.append(','.join(map(lambda x: str(x), record.values())))
+                file_stat_list.append(','.join(map(lambda x: str(x), record.values())))
+            except Exception as e:
+                print('{}'.format(e))
 
         print("total_size:  {}".format(total_size))
         return file_stat_list, total_size
@@ -174,9 +178,6 @@ def retrieve_file_stat(outputdir, artifact_list, timezone):
 
 
 def save_file_stat(outputdir, file_stat_list):
-    # stat_file = open(os.path.join(outputdir, 'artifact_file_stat.csv'), 'wt')
-    # stat_file.write('\n'.join(file_stat_list))
-    # stat_file.close()
     try:
         with open(os.path.join(outputdir, 'artifact_file_stat.csv'), 'wt') as fp:
             fp.write('\n'.join(file_stat_list))
@@ -196,6 +197,7 @@ def write_no_log_fseventsd_file(outputdir):
 
 # get timestamp list that consist of local snapshots and Time Machine backups
 def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
+    '''Returns list of namedtuples of type target_volume'''
     backup_list = list()
     verify_codesign(cmd_tmutil)
 
@@ -208,7 +210,7 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
             for backup in backups.split('\n'):
                 backup_timestamp = re.match(r'/Volumes/.*/Backups.backupdb/.*/(\d{4}\-\d{2}\-\d{2}\-\d{6})', backup)
                 if backup_timestamp and backup_timestamp.group(1) >= timestamp:
-                    backup_list.append(backup + '/' + volumename)
+                    backup_list.append(target_volume('TM-Backup-' + backup_timestamp.group(1), backup + '/' + volumename))
 
     # local snapshots
     if localsnapshots:
@@ -222,7 +224,27 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
                     ps_tmutil = subprocess.Popen([cmd_tmutil, 'mountlocalsnapshots', '/', snapshot_timestamp.group(1)], stdout=subprocess.PIPE)
                     mount_result, e = ps_tmutil.communicate()
                     if not ps_tmutil.returncode:
-                        backup_list.append(mount_result.split('\n')[1].split('"')[1])
+                        if mount_result.endswith("(\n)\n"): # Failed without error, this happens on some systems, reason unknown!
+                            print('Failed to mount snapshot ' + snapshot_timestamp.group(1))
+                            continue
+                        try:
+                            # Sometimes output contains unicode chars rendered as \Uxxxx, which won't be recognized as a valid path and needs to be fixed
+                            #  Mounted local snapshots: (
+                            #    "/Volumes/com.apple.TimeMachine.localsnapshots/Backups.backupdb/Batman\U2019s Mac/2021-08-13-012712/Macintosh HD - Data"
+                            #  )
+                            # Need to convert the \U2019 into it's native form which is right-single-quote character
+                            snap_mounted_path = mount_result.split('\n')[1].split('"')[1]
+                            if not os.path.exists(snap_mounted_path): # needs fixing - see comment above
+                                try:
+                                    snap_mounted_path = snap_mounted_path.replace("\\U", "\\u").decode('unicode_escape').encode('utf-8')
+                                except Exception as ex:
+                                    print("Failed to decode unicode in snap_mounted_path")
+                                    print(str(ex))
+                                    continue
+                            backup_list.append(target_volume('Snapshot-' + snapshot_timestamp.group(1), snap_mounted_path))
+                        except Exception as ex:
+                            print('Error trying to mount snapshot - ' + str(ex))
+                            print('mount_result was : ' + str(mount_result))
 
     return backup_list
 
@@ -264,17 +286,19 @@ def list_config_categories():
 
 
 # return a list of artifact files
-def setup_artifact_files(prefix, categories):
+def setup_artifact_files(vol_root_path, categories):
     config = read_config()
     artifact_files = []
     for section in config.sections():
         if (section in categories) or ('all' in categories):
             for k, v in config.items(section):
-                path_list = glob.glob(os.path.join(prefix, v))
+                if v[0] == '/':
+                    v = v[1:] # Remove leading / else os.path.join will ignore the following part!
+                path_list = glob.glob(os.path.join(vol_root_path, v))
                 if len(path_list) > 0:
                     artifact_files.extend(path_list)
                 else:
-                    dbg_print('Files not found or cannot access: {}'.format(os.path.join(prefix, v)))
+                    dbg_print('Files not found or cannot access: {}'.format(os.path.join(vol_root_path, v)))
 
     return artifact_files
 
@@ -377,9 +401,15 @@ def builtin_copy(outputdir, artifact_list, log_file, copy_symlinks=False):
         sys.exit('Error has been occurred in builtin_copy(): {}'.format(err))
 
 
-def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False):
+def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False, source_path='/'):
     # deduplicate artifact_list
     artifact_list = list(set(artifact_list))
+    # Make paths relative to remove "/Volumes/com.apple.TimeMachine.localsnapshots/Backups.backupdb/..../Macintosh HD - Data" from path
+    if source_path != '/':
+        root_path_len = len(source_path)
+        if source_path.endswith('/'):
+            root_path_len -= 1
+        artifact_list = [x[0:root_path_len] + '/.' + x[root_path_len:] for x in artifact_list]
     log_file = os.path.join(outputdir, 'copy_artifact_files.log')
     if use_builtincopy:
         returncode = builtin_copy(outputdir, artifact_list, log_file)
@@ -412,6 +442,7 @@ def main():
 
     session_id = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     hostname = os.uname()[1].split('.')[0]
+    host_and_session = hostname + '_' + session_id
     args = parse_arguments()
 
     debug_mode = args.debug
@@ -428,21 +459,16 @@ def main():
         sys.exit('outputtype option must be specified \'dir\', \'dmg\' or \'ro-dmg\'.')
 
     if args.outputdir:
-        outputdir = os.path.join(os.path.abspath(args.outputdir), hostname + '_' + session_id)
+        base_outputdir = os.path.join(os.path.abspath(args.outputdir), host_and_session)
     else:
-        outputdir = os.path.join(get_script_dir(), hostname + '_' + session_id)
-
-    if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
-        outputdmg = outputdir + '.dmg'
-        dmgdir = '/'.join(outputdmg.split('/')[:-1])
-        outputdir = os.path.join('/Volumes', hostname + '_' + session_id)
+        base_outputdir = os.path.join(get_script_dir(), host_and_session)
 
     try:
         if args.outputtype == 'dir':
-            print('Output dir: {}'.format(outputdir))
-            os.makedirs(outputdir)
+            print('Output dir: {}'.format(base_outputdir))
+            os.makedirs(base_outputdir)
         elif args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
-            print('Output DMG file: {}'.format(outputdmg))
+            pass
         else:
             sys.exit('Invalid output type: {}'.format(args.outputtype))
 
@@ -451,7 +477,7 @@ def main():
             print('Debug log: {}'.format(file_debug))
         print('')
     except Exception.FileExistsError:
-        sys.exit('Unable to create output directory: {}'.format(outputdir))
+        sys.exit('Unable to create output directory: {}'.format(base_outputdir))
 
     backup_target_list = list()
     if args.timemachine or args.localsnapshots:
@@ -459,50 +485,69 @@ def main():
             timestamp = args.timestamp
         print('Detecting local snapshots and Time Machine backups...')
         backup_target_list = get_backup_targets(timestamp, args.timemachine, args.localsnapshots, args.volumename)
-        print('{}'.format('\n'.join(backup_target_list)))
-
-    dir_prefix = ['/']
+        print('{}'.format('\n'.join([x[1] for x in backup_target_list])))
+    
+    targets = [target_volume('ROOT', '/')]
     if len(backup_target_list) > 0:
-        dir_prefix.extend(backup_target_list)
+        targets.extend(backup_target_list)
 
-    artifact_list = list()
-    print('Finding aritifact files for backup...')
-    for prefix in dir_prefix:
-        artifact_list.extend(setup_artifact_files(prefix, [x.lower() for x in args.categories.split(',')]))
+    for target_vol in targets:
+        artifact_list = list()
+        print('Finding artifact files in {} for backup...'.format(target_vol.root_path))
+        artifact_list.extend(setup_artifact_files(target_vol.root_path, [x.lower() for x in args.categories.split(',')]))
 
-    print('Retrieving artifact file stat...')
-    if args.outputtype == 'dir':
-        file_stat_list, total_size = retrieve_file_stat(outputdir, artifact_list, args.timezone)
-    elif args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
-        file_stat_list, total_size = retrieve_file_stat(dmgdir, artifact_list, args.timezone)
+        print('Retrieving artifact file stat...')
+        if args.outputtype == 'dir':
+            outputdir = base_outputdir if target_vol.root_path == '/' else base_outputdir + '_' + target_vol.name
+            print('Output dir: {}'.format(outputdir))
+            try:
+                if not os.path.exists(outputdir):
+                    os.makedirs(outputdir)
+            except OSError as ex:
+                print('Error, failed to create output dir: ' + str(ex))
+            file_stat_list, total_size = retrieve_file_stat(outputdir, artifact_list, args.timezone)
+        elif args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
+            if target_vol.root_path == '/':
+                outputdmg = base_outputdir + '.dmg'
+                outputdir = os.path.join('/Volumes', host_and_session)
+            else:
+                outputdmg = base_outputdir + '_' + target_vol.name + '.dmg'
+                outputdir = os.path.join('/Volumes', host_and_session + '_' + target_vol.name)
+            dmgdir = '/'.join(outputdmg.split('/')[:-1])
+            file_stat_list, total_size = retrieve_file_stat(dmgdir, artifact_list, args.timezone)
 
-    print('Checking outputdir free space...')
-    if args.outputtype == 'dir' and total_size * 1.05 >= os.statvfs(outputdir).f_bfree * os.statvfs(outputdir).f_frsize:
-        sys.exit("{} doesn't have enough free space.".format(outputdir))
-    elif args.outputtype == 'dmg' and total_size * 1.1 >= os.statvfs(dmgdir).f_bfree * os.statvfs(dmgdir).f_frsize:
-        sys.exit("{} doesn't have enough free space.".format(outputdir))
-    elif args.outputtype == 'ro-dmg' and (total_size * 1.1) * 2 >= os.statvfs(dmgdir).f_bfree * os.statvfs(dmgdir).f_frsize:
-        sys.exit("{} doesn't have enough free space.".format(outputdir))
+        print('Checking outputdir free space...')
+        if args.outputtype == 'dir' and total_size * 1.05 >= os.statvfs(outputdir).f_bfree * os.statvfs(outputdir).f_frsize:
+            sys.exit("{} doesn't have enough free space.".format(outputdir))
+        elif args.outputtype == 'dmg' and total_size * 1.1 >= os.statvfs(dmgdir).f_bfree * os.statvfs(dmgdir).f_frsize:
+            sys.exit("{} doesn't have enough free space.".format(dmgdir))
+        elif args.outputtype == 'ro-dmg' and (total_size * 1.1) * 2 >= os.statvfs(dmgdir).f_bfree * os.statvfs(dmgdir).f_frsize:
+            sys.exit("{} doesn't have enough free space.".format(dmgdir))
 
-    if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
-        print('Creating and mounting DMG file...')
-        create_and_mount_dmg(outputdmg, hostname + '_' + session_id, total_size)
-        print('Writing .fseventsd/no_log empty file...')
-        write_no_log_fseventsd_file(outputdir)
+        if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
+            print('Creating and mounting DMG file...')
+            if target_vol.root_path == '/':
+                vol_name = host_and_session
+            else:
+                vol_name = host_and_session + '_' + target_vol.name
+                outputdmg = base_outputdir + '_' + target_vol.name + '.dmg'
+            create_and_mount_dmg(outputdmg, vol_name, total_size)
+            print('Writing .fseventsd/no_log empty file...')
+            write_no_log_fseventsd_file(outputdir)
 
-    print('Saving file stat...')
-    save_file_stat(outputdir, file_stat_list)
+        print('Saving file stat...')
+        save_file_stat(outputdir, file_stat_list)
 
-    print('Copying artifact files...')
-    copy_artifact_files(outputdir, artifact_list, args.use_builtincopy)
+        print('Copying artifact files...')
+        copy_artifact_files(outputdir, artifact_list, args.use_builtincopy, target_vol.root_path)
 
-    if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
-        print('Unmounting DMG file...')
-        unmount_dmg(hostname + '_' + session_id)
+        if args.outputtype == 'dmg' or args.outputtype == 'ro-dmg':
+            print('Unmounting DMG file...')
+            unmount_dmg(vol_name)
 
-        if args.outputtype == 'ro-dmg':
-            print('Converting DMG file to Read Only DMG file...')
-            convert_dmg(outputdmg)
+            if args.outputtype == 'ro-dmg':
+                print('Converting DMG file to Read Only DMG file...')
+                convert_dmg(outputdmg)
 
     if args.localsnapshots:
         print('Unmounting all local snapshots...')
