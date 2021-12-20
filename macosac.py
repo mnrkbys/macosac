@@ -45,6 +45,7 @@ file_debug = None
 
 target_volume = collections.namedtuple("target_volume", "name root_path")
 
+
 # setup arguments
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Collects macOS forensic artifacts.")
