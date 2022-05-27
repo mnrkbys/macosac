@@ -7,8 +7,41 @@ This tool does not provide features for analyzing artifacts, so you can analyze 
 ## Requirement
 
 - Python 2.7.x
+- Python 3.x
 
 Yes, "Python 2.7". Not "Python 3.7". Although I know that Python 2.7 has been already dead, We can not install additional tools to a victim machine from a forensic perspective. But, it has been installed by default, so we have to take full advantage of it for DFIR.
+
+## Installation
+
+Download scripts from this repository to an analyst's computer.
+
+```bash
+$ git clone https://github.com/mnrkbys/macosac.git
+```
+Then, copy files above to an USB thumb drive or a external SSD drive.
+
+Besides, Terminal.app has to be allowed "Full Disk Access" on victim computers.
+
+![full disk access](images/permit_full_disk_access.png)
+
+## Building native binaries
+
+Actually, macOS 12.3 or later do not come with a Python runtime. So, I strongly recommend using a native binary version of macosac, if you run on that environments.
+
+If you need to a build native binary from macosac.py. You have to install Python modules below:
+
+- Nuitka
+- zstandard
+- xattr
+- ordered-set (if you want)
+
+```shell
+% nuitka3 --follow-imports --onefile --onefile-tempdir-spec='./temp_%PID%_%TIME%/' macosac.py
+% ls -al macosac.bin 
+-rwxr-xr-x  1 macforensics  staff  6814812  5 27 16:00 macosac.bin
+```
+
+Unfortunately, Nuitka does not support yet cross compilation or building universal binaries. If you need ARM64 binaries for Apple Silicon Macs, you have to ready the hardware.
 
 ## Usage
 
@@ -48,31 +81,21 @@ optional arguments:
   --debug               Enable debug mode.
 ```
 
+## Analyze collected artifacts
+
+macOS Artifact Collector can only collect artifacts. Therefore, you need to use other tools for analyzing them such as tools below:
+
+- mac_apt [https://github.com/ydkhatri/mac_apt](https://github.com/ydkhatri/mac_apt)
+- AutoMacTC [https://github.com/CrowdStrike/automactc](https://github.com/CrowdStrike/automactc)
+- APOLLO [https://github.com/mac4n6/APOLLO](https://github.com/mac4n6/APOLLO)
+- Blacklight [https://www.blackbagtech.com/products/blacklight/](https://www.blackbagtech.com/products/blacklight/)
+- AXIOM [https://www.magnetforensics.com/products/magnet-axiom/](https://www.magnetforensics.com/products/magnet-axiom/)
+
 ## Demo
 
 Acquire artifacts on macOS 10.14, then analyze them on macOS 10.15 with AutoMacTC. This demo movie was made for Japan Security Analyst Conference 2020 (JSAC2020)
 
 ![macosac demo](images/JSAC2020_demo1.gif)
-
-## Installation
-
-```bash
-git clone https://github.com/mnrkbys/macosac.git
-```
-
-Besides, Terminal.app have to be allowed "Full Disk Access".
-
-![full disk access](images/permit_full_disk_access.png)
-
-## Analyze collected artifacts
-
-macOS Artifact Collector can only collect artifacts. Therefore, you need to use other tools for analyzing them such as tools below:
-
-- AutoMacTC [https://github.com/CrowdStrike/automactc](https://github.com/CrowdStrike/automactc)
-- mac_apt [https://github.com/ydkhatri/mac_apt](https://github.com/ydkhatri/mac_apt)
-- APOLLO [https://github.com/mac4n6/APOLLO](https://github.com/mac4n6/APOLLO)
-- Blacklight [https://www.blackbagtech.com/products/blacklight/](https://www.blackbagtech.com/products/blacklight/)
-- AXIOM [https://www.magnetforensics.com/products/magnet-axiom/](https://www.magnetforensics.com/products/magnet-axiom/)
 
 ## Convert DMG to E01
 
@@ -88,11 +111,14 @@ $ hdiutil detach /dev/disk4
 
 ## TODO
 
+- [X] Support Python 3.x
 - [ ] Acquire live information (e.g. last, netstat, ps, lsof, and so on)
 - [ ] Cooperate with [TrueTree](https://github.com/themittenmac/TrueTree)
 - [ ] Cooperate with [KnockKnock](https://github.com/objective-see/KnockKnock)
 - [ ] Acquire binary files which are specified in Launch Daemons/Agents plist files
 - [ ] Create System volume and Data volume in one dmg file (for macOS 10.15+)
+- [ ] Record file timestamps as UTC instead of local time
+- [X] Consider how to build native binaries
 - [ ] Acquire more information
 
 ## Author

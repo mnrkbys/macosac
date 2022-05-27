@@ -6,3 +6,7 @@ build/
 dist/
 tmp/
 macosac.spec
+macosac.build/
+macosac.dist/
+macosac.onefile-build/
+macosac.bin

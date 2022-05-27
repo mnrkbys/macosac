@@ -19,21 +19,27 @@
 # limitations under the License.
 #
 
-import os
-import sys
 import argparse
-import subprocess
-import glob
-import ConfigParser
-import re
-import time
 import collections
 import datetime
+import glob
+import os
+import re
 import shutil
-import tempfile
-import xattr
 import stat
+import subprocess
+import sys
+import tempfile
+import time
 
+import xattr
+
+try:
+    import ConfigParser
+    py3_flag = False
+except ImportError:
+    import configparser
+    py3_flag = True
 
 # global variables
 cmd_rsync = '/usr/bin/rsync'
@@ -66,7 +72,7 @@ def parse_arguments():
     parser.add_argument('-tz', '--timezone', action='store', default='UTC0',
                         help='Timezone: e.g. UTC0, JST-9 (default: UTC0)')
     parser.add_argument('-vn', '--volumename', action='store', default='Macintosh HD',
-                        help='Disk volume name macOS is installed (default: \'Macintosh HD\')')
+                        help='Disk volume name macOS is installed (default: "Macintosh HD")')
     parser.add_argument('--use-builtincopy', action='store_true', default=False,
                         help='Use a built-in copy function instead of rsync.')
     # parser.add_argument('--force', action='store_true', default=False,
@@ -97,7 +103,8 @@ def create_and_mount_dmg(dmg_path, volname, data_size):
     if dmg_size < 1 * 1024 * 1024:  # 1MB
         dmg_size = 1 * 1024 * 1024
     dbg_print('dmg_path: {}\nvolname: {}\ndata_size: {}\ndmg_size: {}'.format(dmg_path, volname, data_size, dmg_size))
-    return_code = subprocess.call([cmd_hdiutil, 'create', '-size', str(dmg_size), '-fs', 'HFS+', '-volname', volname, dmg_path])
+    # return_code = subprocess.call([cmd_hdiutil, 'create', '-size', str(dmg_size), '-fs', 'HFS+', '-volname', volname, dmg_path])
+    return_code = subprocess.call([cmd_hdiutil, 'create', '-size', str(dmg_size), '-fs', 'APFS', '-volname', volname, dmg_path])
     if return_code:
         sys.exit('Failed to create dmg file: {}'.format(dmg_path))
 
@@ -264,12 +271,15 @@ def get_script_dir():
 
 
 def read_config(config_file='macosac.ini'):
-    config = ConfigParser.ConfigParser()
+    if py3_flag:  # Python 3.x
+        config = configparser.ConfigParser()
+    else:         # PYthon 2.x
+        config = ConfigParser.ConfigParser()
     config_file_path = os.path.join(get_script_dir(), config_file)
     if os.path.exists(config_file_path):
         config.read(config_file_path)
     else:
-        sys.exit('Config file does not exitst: {}'.format(config_file_path))
+        sys.exit('Config file does not exits: {}'.format(config_file_path))
     return config
 
 
@@ -336,7 +346,10 @@ def copy_metadata(path_src, path_dst, symlink=False):
         # Unfortunately, os.utime() of Python 2 does not have the "follow_symlinks" option, so I have no idea to modify atime and mtime of a symlink itself.
         # https://stackoverflow.com/questions/48068739/how-can-i-change-atime-and-mtime-of-a-symbolic-link-from-python
         dbg_print('utime')
-        os.utime(path_dst, (file_stat.st_atime, file_stat.st_mtime))
+        if py3_flag and symlink:
+            os.utime(path_dst, (file_stat.st_atime, file_stat.st_mtime), follow_symlinks=False)
+        else:
+            os.utime(path_dst, (file_stat.st_atime, file_stat.st_mtime))
 
         if file_stat.st_flags & stat.SF_NOUNLINK:
             tmp_flags |= stat.SF_NOUNLINK
@@ -421,11 +434,14 @@ def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False, source_
         if dryrun_mode:
             rsync_opts = rsync_opts + 'n'
         if debug_mode:
-            # ps_rsync = subprocess.Popen([cmd_rsync, '-naREL', '--progress', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE)
             ps_rsync = subprocess.Popen([cmd_rsync, rsync_opts, '--progress', '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE)
         else:
             ps_rsync = subprocess.Popen([cmd_rsync, rsync_opts, '--temp-dir=' + temp_dir, '--log-file=' + log_file, '--files-from=-', '/', outputdir], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        ps_rsync.communicate(input='\n'.join(artifact_list))
+
+        if py3_flag:
+            ps_rsync.communicate(input='\n'.join(artifact_list).encode('utf-8'))
+        else:
+            ps_rsync.communicate(input='\n'.join(artifact_list))
         shutil.rmtree(temp_dir)
         returncode = ps_rsync.returncode
 
@@ -457,7 +473,7 @@ def main():
         sys.exit('This script needs root privilege.')
 
     if args.outputtype not in ['dir', 'dmg', 'ro-dmg']:
-        sys.exit('outputtype option must be specified \'dir\', \'dmg\' or \'ro-dmg\'.')
+        sys.exit('outputtype option must be specified "dir", "dmg" or "ro-dmg".')
 
     if args.outputdir:
         base_outputdir = os.path.join(os.path.abspath(args.outputdir), host_and_session)
@@ -487,7 +503,7 @@ def main():
         print('Detecting local snapshots and Time Machine backups...')
         backup_target_list = get_backup_targets(timestamp, args.timemachine, args.localsnapshots, args.volumename)
         print('{}'.format('\n'.join([x[1] for x in backup_target_list])))
-    
+
     targets = [target_volume('ROOT', '/')]
     if len(backup_target_list) > 0:
         targets.extend(backup_target_list)
