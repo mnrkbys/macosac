@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 #
 # macosac.py
 # macOS Artifact Collector can collect forensics artifact files on macOS.
@@ -304,8 +304,8 @@ def setup_artifact_files(vol_root_path, categories):
         if (section in categories) or ('all' in categories):
             for k, v in config.items(section):
                 if v[0] == '/':
-                    v = v[1:] # Remove leading / else os.path.join will ignore the following part!
-                path_list = glob.glob(os.path.join(vol_root_path, v))
+                    v = v[1:]  # Remove leading / else os.path.join will ignore the following part!
+                path_list = glob.glob(os.path.join(vol_root_path, v), recursive=True)
                 if len(path_list) > 0:
                     artifact_files.extend(path_list)
                 else:
