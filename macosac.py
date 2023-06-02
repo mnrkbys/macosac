@@ -570,7 +570,7 @@ def main():
         print('Unmounting all local snapshots...')
         unmount_all_localsnapshots()
 
-    print('Fnished.')
+    print('Finished.')
     print('\nNote that the copied files have the same meta information (e.g. permission, extended attributes, or etc.) as their original files.\n')
 
 
