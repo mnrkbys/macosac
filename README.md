@@ -26,7 +26,7 @@ Besides, Terminal.app has to be allowed "Full Disk Access" on victim computers.
 
 ## Building native binaries
 
-Actually, macOS 12.3 or later do not come with a Python runtime. So, I strongly recommend using a native binary version of macosac, if you run on that environments.
+Actually, macOS 12.3 or later does not come with a Python runtime. So, I strongly recommend using a native binary version of macosac, if you run on these environments.
 
 If you need to a build native binary from macosac.py. You have to install Python modules below:
 
@@ -118,6 +118,7 @@ $ hdiutil detach /dev/disk4
 - [ ] Acquire binary files which are specified in Launch Daemons/Agents plist files
 - [ ] Create System volume and Data volume in one dmg file (for macOS 10.15+)
 - [ ] Record file timestamps as UTC instead of local time
+- [ ] Reduce file copy time
 - [X] Consider how to build native binaries
 - [ ] Acquire more information
 
