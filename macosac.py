@@ -215,10 +215,12 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
         backups, err = ps_tmutil.communicate()
 
         if not ps_tmutil.returncode:
+            backups = backups.decode() if type(backups) is bytes else backups  # Python 3 returns bytes
             for backup in backups.split('\n'):
-                backup_timestamp = re.match(r'/Volumes/.*/Backups.backupdb/.*/(\d{4}\-\d{2}\-\d{2}\-\d{6})', backup)
-                if backup_timestamp and backup_timestamp.group(1) >= timestamp:
-                    backup_list.append(target_volume('TM-Backup-' + backup_timestamp.group(1), backup + '/' + volumename))
+                tmbackup_volume = re.match(r'/Volumes/.*/Backups.backupdb/.*/(?P<timestamp>\d{4}\-\d{2}\-\d{2}\-\d{6})', backup) or \
+                                  re.match(r'/Volumes/.timemachine/[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/\d{4}\-\d{2}\-\d{2}\-\d{6}.backup/(?P<timestamp>\d{4}\-\d{2}\-\d{2}\-\d{6}).backup', backup)
+                if tmbackup_volume and tmbackup_volume['timestamp'] >= timestamp:
+                    backup_list.append(target_volume('TM-Backup-' + tmbackup_volume['timestamp'], backup + '/' + volumename))
 
     # local snapshots
     if localsnapshots:
@@ -226,14 +228,17 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
         snapshots, err = ps_tmutil.communicate()
 
         if not ps_tmutil.returncode:
+            snapshots = snapshots.decode() if type(snapshots) is bytes else snapshots
             for snapshot in snapshots.split('\n'):
-                snapshot_timestamp = re.match(r'com.apple.TimeMachine.(\d{4}\-\d{2}\-\d{2}\-\d{6})', snapshot)
-                if snapshot_timestamp and snapshot_timestamp.group(1) >= timestamp:
-                    ps_tmutil = subprocess.Popen([cmd_tmutil, 'mountlocalsnapshots', '/', snapshot_timestamp.group(1)], stdout=subprocess.PIPE)
+                snapshot_volume = re.match(r'com.apple.TimeMachine.(?P<timestamp>\d{4}\-\d{2}\-\d{2}\-\d{6})', snapshot) or \
+                                  re.match(r'/Volumes/com.apple.TimeMachine.localsnapshots/Backups.backupdb/.+/(?P<timestamp>\d{4}\-\d{2}\-\d{2}\-\d{6})/.*', snapshot)
+                if snapshot_volume and snapshot_volume['timestamp'] >= timestamp:
+                    ps_tmutil = subprocess.Popen([cmd_tmutil, 'mountlocalsnapshots', '/', snapshot_volume['timestamp']], stdout=subprocess.PIPE)
                     mount_result, e = ps_tmutil.communicate()
                     if not ps_tmutil.returncode:
-                        if mount_result.endswith("(\n)\n"): # Failed without error, this happens on some systems, reason unknown!
-                            print('Failed to mount snapshot ' + snapshot_timestamp.group(1))
+                        mount_result = mount_result.decode() if type(mount_result) is bytes else mount_result
+                        if mount_result.endswith("(\n)\n"):  # Failed without error, this happens on some systems, reason unknown!
+                            print('Failed to mount snapshot ' + snapshot_volume['timestamp'])
                             continue
                         try:
                             # Sometimes output contains unicode chars rendered as \Uxxxx, which won't be recognized as a valid path and needs to be fixed
@@ -242,14 +247,14 @@ def get_backup_targets(timestamp, timemachine, localsnapshots, volumename):
                             #  )
                             # Need to convert the \U2019 into it's native form which is right-single-quote character
                             snap_mounted_path = mount_result.split('\n')[1].split('"')[1]
-                            if not os.path.exists(snap_mounted_path): # needs fixing - see comment above
+                            if not os.path.exists(snap_mounted_path):  # needs fixing - see comment above
                                 try:
                                     snap_mounted_path = snap_mounted_path.replace("\\U", "\\u").decode('unicode_escape').encode('utf-8')
                                 except Exception as ex:
                                     print("Failed to decode unicode in snap_mounted_path")
                                     print(str(ex))
                                     continue
-                            backup_list.append(target_volume('Snapshot-' + snapshot_timestamp.group(1), snap_mounted_path))
+                            backup_list.append(target_volume('Snapshot-' + snapshot_volume['timestamp'], snap_mounted_path))
                         except Exception as ex:
                             print('Error trying to mount snapshot - ' + str(ex))
                             print('mount_result was : ' + str(mount_result))
