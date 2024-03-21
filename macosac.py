@@ -44,6 +44,7 @@ except ImportError:
     py3_flag = True
 
 # global variables
+__version__ = '20240321'
 cmd_rsync = '/usr/bin/rsync'
 cmd_tmutil = '/usr/bin/tmutil'
 cmd_hdiutil = '/usr/bin/hdiutil'
@@ -77,6 +78,7 @@ def parse_arguments():
                         help='Disk volume name macOS is installed (default: macOS < 10.15: "Macintosh HD", macOS >= 10.15 (Intel): "Macintosh HD - Data", macOS >= 10.15 (Apple Silicon): "Data")')
     parser.add_argument('--use-builtincopy', action='store_true', default=False,
                         help='Use a built-in copy function instead of rsync.')
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s {}'.format(__version__))
     # parser.add_argument('--force', action='store_true', default=False,
     #                     help='Enable to overwrite existing data.')
     parser.add_argument('--debug', action='store_true', default=False, help='Enable debug mode.')
