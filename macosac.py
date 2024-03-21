@@ -18,12 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
 
 import argparse
 import collections
 import datetime
 import glob
 import os
+import platform
 import re
 import shutil
 import stat
@@ -71,8 +73,8 @@ def parse_arguments():
                         help='Specify the timestamp of localsnapshots/Time Machine backups to start collecting: YYYY-MM-DD-hhmmss (default: 0000-00-00-000000 It means to collect all backups)')
     parser.add_argument('-tz', '--timezone', action='store', default='UTC0',
                         help='Timezone: e.g. UTC0, JST-9 (default: UTC0)')
-    parser.add_argument('-vn', '--volumename', action='store', default='Macintosh HD',
-                        help='Disk volume name macOS is installed (default: "Macintosh HD")')
+    parser.add_argument('-vn', '--volumename', action='store', default='',
+                        help='Disk volume name macOS is installed (default: macOS < 10.15: "Macintosh HD", macOS >= 10.15 (Intel): "Macintosh HD - Data", macOS >= 10.15 (Apple Silicon): "Data")')
     parser.add_argument('--use-builtincopy', action='store_true', default=False,
                         help='Use a built-in copy function instead of rsync.')
     # parser.add_argument('--force', action='store_true', default=False,
@@ -92,6 +94,20 @@ def dbg_print(msg):
             return True
 
     return False
+
+
+def determine_default_volume() -> str:
+    release, version_info, machine = platform.mac_ver()
+    release = float(release)
+    dbg_print('macOS release: {}, version_info: {}, machine: {}'.format(release, version_info, machine))
+    if release < 10.15:
+        return 'Macintosh HD'
+    elif release >= 10.15 and machine == 'x86_64':
+        return 'Macintosh HD - Data'
+    elif release >= 10.15 and machine == 'arm64':
+        return 'Data'
+    else:
+        sys.exit('Unknown macOS version or machine type: {} {} {}'.format(release, version_info, machine))
 
 
 # create and mount DMG file to copy artifacts
@@ -505,8 +521,15 @@ def main():
     if args.timemachine or args.localsnapshots:
         if args.timestamp:
             timestamp = args.timestamp
+
+        if not args.volumename:
+            volumename = determine_default_volume()
+        else:
+            volumename = args.volumename
+        print('Target volume name: {}'.format(volumename))
+
         print('Detecting local snapshots and Time Machine backups...')
-        backup_target_list = get_backup_targets(timestamp, args.timemachine, args.localsnapshots, args.volumename)
+        backup_target_list = get_backup_targets(timestamp, args.timemachine, args.localsnapshots, volumename)
         print('{}'.format('\n'.join([x[1] for x in backup_target_list])))
 
     targets = [target_volume('ROOT', '/')]
