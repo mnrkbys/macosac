@@ -435,7 +435,7 @@ def builtin_copy(outputdir, artifact_list, log_file, copy_symlinks=False):
         log_fp.close()
         return 0
     except (IOError, OSError, shutil.Error) as err:
-        sys.exit('Error has been occurred in builtin_copy(): {}'.format(err))
+        print('Error has been occurred in builtin_copy(): {}'.format(err))
 
 
 def copy_artifact_files(outputdir, artifact_list, use_builtincopy=False, source_path='/'):
